@@ -1,38 +1,31 @@
-{-# LANGUAGE
-    GADTs
-  , KindSignatures
-  , DataKinds
-  , TypeOperators
-  #-}
-
 module Data.ConstrainedList where
 
 import Data.Foldable (Foldable())
+import Data.Kind (Type)
 import Data.Traversable (Traversable())
 
-data FoldableList (fs :: [* -> *]) where
-    FNil :: FoldableList '[]
-    FCons :: (Functor f, Foldable f) => FoldableList fs -> FoldableList (f ': fs)
+data FoldableList (fs :: [Type -> Type]) where
+  FNil :: FoldableList '[]
+  FCons :: (Functor f, Foldable f) => FoldableList fs -> FoldableList (f ': fs)
 
-class Foldables (fs :: [* -> *]) where
-    frep :: FoldableList fs
+class Foldables (fs :: [Type -> Type]) where
+  frep :: FoldableList fs
 
 instance Foldables '[] where
-    frep = FNil
+  frep = FNil
 
 instance (Functor f, Foldable f, Foldables fs) => Foldables (f ': fs) where
-    frep = FCons frep
+  frep = FCons frep
 
+data TraversableList (fs :: [Type -> Type]) where
+  TNil :: TraversableList '[]
+  TCons :: Traversable f => TraversableList fs -> TraversableList (f ': fs)
 
-data TraversableList (fs :: [* -> *]) where
-    TNil :: TraversableList '[]
-    TCons :: Traversable f => TraversableList fs -> TraversableList (f ': fs)
-
-class Traversables (fs :: [* -> *]) where
-    trep :: TraversableList fs
+class Traversables (fs :: [Type -> Type]) where
+  trep :: TraversableList fs
 
 instance Traversables '[] where
-    trep = TNil
+  trep = TNil
 
 instance (Traversable f, Traversables fs) => Traversables (f ': fs) where
-    trep = TCons trep
+  trep = TCons trep

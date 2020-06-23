@@ -1,21 +1,14 @@
-{-# LANGUAGE
-    GADTs
-  , TypeOperators
-  #-}
-
 module Data.Match.Monadic where
 
+import Control.Monad (liftM)
+import Data.ConstrainedList (TraversableList(..), Traversables(trep))
 import Data.Match (Algebras, Match(..), fold, transAlg)
 import Data.Match.Fix (Fix())
-import Data.Match.Subset ((<:)(..))
-import Data.ConstrainedList (TraversableList(..), Traversables(trep))
-
-import Prelude hiding (sequence)
+import Data.Match.Subset (type (<:)(..))
 import Data.Traversable (sequence)
-import Control.Monad (liftM)
 
 mliftWith :: Monad m => TraversableList fs -> Match fs a b -> Match fs (m a) (m b)
-mliftWith TNil       Void       = Void
+mliftWith TNil Void = Void
 mliftWith (TCons ts) (k ::: ks) = (liftM k . sequence) ::: mliftWith ts ks
 
 mlift :: (Monad m, Traversables fs) => Match fs a b -> Match fs (m a) (m b)

@@ -1,28 +1,20 @@
-{-# LANGUAGE
-    DataKinds
-  , TypeOperators
-  , UndecidableInstances
-  , FlexibleContexts
-  , DeriveFunctor
-  , LambdaCase
-  #-}
-
+{-# language UndecidableInstances #-}
 module Data.Match.Effects where
 
 import Data.Match
 import Data.Match.Fix
 import Data.Match.Membership
 import Data.Match.Subset
-
 import Control.Applicative (Applicative(pure, (<*>)))
 import Control.Monad (liftM2, ap)
 
-data Pure a x = Pure a deriving (Show, Functor)
+newtype Pure a x = Pure a
+  deriving (Functor, Show)
 
 newtype Free fs a = Free { getFix :: Fix (Pure a ': fs) }
 
 free :: (Functor f, Mem f fs) => f (Free fs a) -> Free fs a
-free m = Free . In (There witness) . fmap getFix $ m
+free = Free . In (There witness) . fmap getFix
 
 transFree :: (fs <: gs) => Algebras fs (Free gs a)
 transFree = Free ^<< transAlgWith (subSub srep) <<^ getFix
@@ -30,24 +22,31 @@ transFree = Free ^<< transAlgWith (subSub srep) <<^ getFix
 transFreeSym :: (fs <: gs) => Algebras (Pure a ': fs) (Free gs a)
 transFreeSym = Free ^<< transAlgWith (SCons Here (subSub srep)) <<^ getFix
 
+instance (fs <: fs) => Functor (Free fs) where
+  fmap f = fold ((\(Pure x) -> Free (inn (Pure (f x)))) ::: transFree) . getFix
+
 instance (fs <: fs) => Monad (Free fs) where
-    return         = Free . inn . Pure
-    (Free p) >>= f = fold ((\(Pure x) -> f x) :::
-                           transFree) p
+  return = Free . inn . Pure
+  (Free p) >>= f = fold ((\(Pure x) -> f x) ::: transFree) p
+
 instance (Monad (Free fs), Functor (Free fs)) => Applicative (Free fs) where
-    pure = return
-    (<*>) = ap
+  pure = return
+  (<*>) = ap
 
 subProg :: (fs <: gs) => Free fs a -> Free gs a
-subProg = fold ((\(Pure x) -> Free . inn . Pure $ x) :::
-                transFree) . getFix
+subProg = fold ((\(Pure x) -> Free . inn . Pure $ x) ::: transFree) . getFix
 
 runPure :: Free '[] a -> a
 runPure = match ((\ (Pure x) -> x) ::: Void) . getFix
 
-data State s  x = Get (s -> x) | Put s x deriving (Functor)
-data Nondet   x = Or x x deriving (Show, Functor)
-data Except e x = Throw e deriving (Show, Functor)
+data State s x = Get (s -> x) | Put s x
+  deriving Functor
+
+data Nondet x = Or x x
+  deriving (Functor, Show)
+
+newtype Except e x = Throw e
+  deriving (Functor, Show)
 
 choose :: (fs <: fs, Mem Nondet fs) => a -> a -> Free fs a
 choose a1 a2 = free (Or (return a1) (return a2))
@@ -76,16 +75,12 @@ catch m hdlr = fold ((\case Pure x  -> return x) :::
                      (\case Throw e -> hdlr e) >::
                      transFree) . getFix $ m
 
-runState   :: (fs <: fs) => Free (State s ': fs) a ->
-                            (s -> Free fs (a, s))
-runState =
-    fold ((\case Pure x   -> (\s -> return (x, s))) :::
-          (\case Get g    -> (\s -> g s s)
-                 Put s' k -> (\s -> k s')) :::
-          algST) . getFix
+runState   :: (fs <: fs) => Free (State s ': fs) a -> (s -> Free fs (a, s))
+runState = fold ((\case Pure x   -> (\s -> return (x, s))) :::
+                 (\case Get g    -> (\s -> g s s)
+                        Put s' k -> (\s -> k s')) :::
+                 algST) . getFix
 
 algST :: (fs <: fs) => Algebras fs (s -> Free fs (a, s))
-algST = (Free .) ^<<
-        fromFunctionWith (\ pos m s -> In pos (fmap ($ s) m))
-                         (subSub srep)
-        <<^ (getFix .)
+algST = (Free .) ^<< fromFunctionWith (\pos m s -> In pos (fmap ($ s) m)) (subSub srep)
+                 <<^ (getFix .)

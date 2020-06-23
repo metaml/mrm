@@ -1,35 +1,27 @@
-{-# LANGUAGE
-    GADTs
-  , KindSignatures
-  , DataKinds
-  , TypeOperators
-  , RankNTypes
-  #-}
-
 module Data.Match
   ( module Data.Match
   , module Data.Match.Fix
   , module Data.Match.Membership
   , module Data.Match.Subset
-  )
-where
+  ) where
 
+import Data.Kind (Type)
 import Data.Match.Fix
 import Data.Match.Membership
 import Data.Match.Subset
 
-data Match (fs :: [* -> *]) (a :: *) (b :: *) where
-    Void  :: Match '[] a b
-    (:::) :: Functor f => (f a -> b) -> Match fs a b -> Match (f ': fs) a b
+data Match (fs :: [Type -> Type]) (a :: Type) (b :: Type) where
+  Void  :: Match '[] a b
+  (:::) :: Functor f => (f a -> b) -> Match fs a b -> Match (f ': fs) a b
 
 infixr 6 :::
 
 extractAt :: Elem f fs -> Match fs a b -> (f a -> b)
-extractAt Here        (f :::  _) = f
+extractAt Here (f :::  _) = f
 extractAt (There pos) (_ ::: fs) = extractAt pos fs
 
 overrideAt :: Elem f fs -> (f a -> b) -> Match fs a b -> Match fs a b
-overrideAt Here        g (_ ::: fs) = g ::: fs
+overrideAt Here g (_ ::: fs) = g ::: fs
 overrideAt (There pos) g (f ::: fs) = f ::: overrideAt pos g fs
 
 (>::) :: Mem f fs =>  (f a -> b) -> Match fs a b -> Match fs a b
@@ -45,11 +37,11 @@ fromFunction :: (fs <: fs) => (forall f. Functor f => Elem f fs -> f a -> b) -> 
 fromFunction f = fromFunctionWith f srep
 
 (<<^) :: Match fs b c -> (a -> b) -> Match fs a c
-Void <<^ g       = Void
+Void <<^ g = Void
 (h ::: hs) <<^ g = h . fmap g ::: hs <<^ g
 
 (^<<) :: (b -> c) -> Match fs a b -> Match fs a c
-g ^<< Void       = Void
+g ^<< Void = Void
 g ^<< (h ::: hs) = g . h ::: g ^<< hs
 
 (&&&) :: Match fs a b -> Match fs a c -> Match fs a (b,c)
@@ -93,11 +85,11 @@ subFix :: (fs <: gs) => Fix fs -> Fix gs
 subFix = fold transAlg
 
 subMatchWith :: Sub fs gs -> Match gs r a -> Match fs r a
-subMatchWith SNil           _  = Void
+subMatchWith SNil _  = Void
 subMatchWith (SCons pos xs) as = extractAt pos as ::: subMatchWith xs as
 
 subMatch :: (fs <: gs) => Match gs r a -> Match fs r a
 subMatch = subMatchWith srep
 
 instance Functor (Match fs a) where
-    fmap = (^<<)
+  fmap = (^<<)
